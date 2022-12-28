@@ -20,7 +20,7 @@ logging.basicConfig(
 
 logging.getLogger().setLevel(logging.INFO)
 
-__version__ = '0.0.4'
+__version__ = '0.0.5'
 
 header = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.167 YaBrowser/22.7.3.822 Yowser/2.5 Safari/537.36',}
 header_urllib = [('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.167 YaBrowser/22.7.3.822 Yowser/2.5 Safari/537.36'),]
@@ -39,10 +39,10 @@ def main(username):
         user_folder = curdir / str(username) 
         user_folder.mkdir(parents=True, exist_ok=True)
     
-        datapath = curdir / f'downloaded_projects.csv'
+        datapath = curdir / 'downloaded_projects.csv'
         
     except:
-        logging.error(f"Can't create folder or get current path")
+        logging.error("Can't create folder or get current path")
         
         return None
         
@@ -50,7 +50,7 @@ def main(username):
     # Loading data file 
     try:
         user_projects = read_db_file(datapath)
-        logging.info(f"User projects info successfully downloaded")
+        logging.info("User projects info successfully downloaded")
          
     except:
         logging.error(f"Can't load saved user projects. Create new file by path {datapath}")
@@ -68,16 +68,21 @@ def main(username):
             channel = BeautifulSoup(r.text, "lxml-xml").rss.channel
             tag_titles = channel.select("item > title")
             links = channel.select("item > link")
-
-            titles = [t.text for t in tag_titles]
+            
+            all_titles =  [t.text for t in tag_titles]
+            
+            titles = []
             projects = []
-            for l in links:
-                if not 'blog' in l.text:
-                    projects.append(l.text.split('/')[-1])
+            
+            for title, link in zip(all_titles, links):
+                if not 'blog' in link.text:
+                    titles.append(title)
+                    projects.append(link.text.split('/')[-1])
                 
             page_num_projects = len(projects)
+            
 
-            is_last_page_reached = page_num_projects < 50 # Each full page contains 50 projects. If it has less than 50, it is the last page
+            is_last_page_reached = page_num_projects < 49 # Each full page contains 50 projects. If it has less than 50, it is the last page
 
             for index in range(len(projects)):
 
@@ -168,8 +173,8 @@ def download_media(url, filename):
         print('', end='\n\n')
         
     except:
-        logging.error(f'Download finished with error.\nMore information you can see in .log file')
-        with open(f'dowloading_errors.log', mode='a') as logfile:
+        logging.error('Download finished with error.\nMore information you can see in .log file')
+        with open(f'downloading_errors_{username}.log', mode='a') as logfile:
             logfile.write(f'Failed to download file by url - {url}\n')
         
         
@@ -184,7 +189,7 @@ def write_post_in_db(username, project_hash_id, user_projects):
             writer.writerow([username, project_hash_id])
         
     except:
-        logging.error(f"Can't write new data in file")
+        logging.error("Can't write new data in file")
 
         
 def get_session(headers):
@@ -216,8 +221,8 @@ if __name__ == "__main__":
     complete_status = main(username)
     
     if complete_status:
-        logging.info(f"Downloading finished")
+        logging.info("Downloading finished")
     else:
-        logging.info(f"Downloading with error. More info in bug_report.log")
+        logging.info(f"Downloading with error. More info in bug_report_{username}.log")
     input('Tap Enter to close program....')
                         
