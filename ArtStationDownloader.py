@@ -11,6 +11,8 @@ import urllib.request
 import csv
 import logging
 
+import re
+
 FORMAT = '[%(asctime)s] %(levelname)s - %(message)s'
 
 logging.basicConfig(
@@ -20,7 +22,7 @@ logging.basicConfig(
 
 logging.getLogger().setLevel(logging.INFO)
 
-__version__ = '0.0.5'
+__version__ = '0.0.6'
 
 header = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.167 YaBrowser/22.7.3.822 Yowser/2.5 Safari/537.36',}
 header_urllib = [('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.167 YaBrowser/22.7.3.822 Yowser/2.5 Safari/537.36'),]
@@ -54,6 +56,7 @@ def main(username):
          
     except:
         logging.error(f"Can't load saved user projects. Create new file by path {datapath}")
+        
         with open(datapath, mode='w') as csvfile:
             csvfile.write('username, project_id\n')
     
@@ -61,6 +64,8 @@ def main(username):
     current_page = 1
     try:
         while not is_last_page_reached:
+            success = None
+            
             logging.info(f"Fetching page {current_page} of {username}")
 
             session = get_session(header) 
@@ -69,18 +74,16 @@ def main(username):
             tag_titles = channel.select("item > title")
             links = channel.select("item > link")
             
-            all_titles =  [t.text for t in tag_titles]
-            
+            all_titles = [t.text for t in tag_titles]
             titles = []
-            projects = []
             
+            projects = []
             for title, link in zip(all_titles, links):
                 if not 'blog' in link.text:
                     titles.append(title)
                     projects.append(link.text.split('/')[-1])
                 
             page_num_projects = len(projects)
-            
 
             is_last_page_reached = page_num_projects < 49 # Each full page contains 50 projects. If it has less than 50, it is the last page
 
@@ -108,20 +111,21 @@ def main(username):
                                 asset_image_url = asset["image_url"]
 
                                 # Generate a download filename
-                                filename = project_name[:60].lower().replace(' ', '_').replace(':', '') + "_" + project_hash_id + "_" + str(asset_position) + "." + extension_from_url(asset_image_url)
+                                project_name = re.sub(r'[^\w]', '', project_name.replace(' ', '_'))
+                                filename = project_name[:60].lower() + "_" + project_hash_id + "_" + str(asset_position) + "." + extension_from_url(asset_image_url)
                                 filepath = user_folder / filename
 
                                 logging.info(f"Found image in project - '{project_name}' [hash_id {project_hash_id}] at position {asset_position}.")
                                 logging.info(f'Downloading to {filepath}')
 
                                 # Download it
-                                download_media(asset_image_url, filename=filepath)
+                                success = download_media(asset_image_url, filename=filepath)
                                 sleep(1)
-                                    
-                                    
-
-                        # After downloading all assets, mark the project as downloaded.
-                        write_post_in_db(username, project_hash_id, user_projects)
+                                
+                                
+                        if success:            
+                            # After downloading all assets, mark the project as downloaded.
+                            write_post_in_db(username, project_hash_id, user_projects)
 
             if not is_last_page_reached:
                 current_page = current_page + 1
@@ -162,7 +166,7 @@ def extension_from_url(url):
     return actualExt
 
 def download_media(url, filename):
-    
+    success = False
     # Prepare and execute query to download images
     try:
         opener = urllib.request.build_opener()
@@ -171,11 +175,21 @@ def download_media(url, filename):
         source = urllib.request.urlretrieve(url, filename=filename)
         logging.info('Download successfully!')
         print('', end='\n\n')
+        success = True
         
     except:
-        logging.error('Download finished with error.\nMore information you can see in .log file')
-        with open(f'downloading_errors_{username}.log', mode='a') as logfile:
+        logging.error('Download finished with error.\nMore information you can see in .log file\n')
+        exception_info = exc_info()
+        
+        with open('bug_report_downloading.log', mode='w') as report_file:
+            print_exception(*exception_info, file=report_file)
+            
+        with open('downloading_errors.log', mode='a') as logfile:
             logfile.write(f'Failed to download file by url - {url}\n')
+        
+    finally:
+        return success
+    
         
         
 def is_post_already_saved(username, project_hash_id, user_projects):
@@ -223,6 +237,6 @@ if __name__ == "__main__":
     if complete_status:
         logging.info("Downloading finished")
     else:
-        logging.info(f"Downloading with error. More info in bug_report_{username}.log")
+        logging.info("Downloading with error. More info in bug_report.log")
     input('Tap Enter to close program....')
-                        
+                      
