@@ -7,10 +7,8 @@ from sys import exc_info
 
 import requests
 import urllib.request
-
 import csv
 import logging
-
 import re
 
 FORMAT = '[%(asctime)s] %(levelname)s - %(message)s'
@@ -22,10 +20,11 @@ logging.basicConfig(
 
 logging.getLogger().setLevel(logging.INFO)
 
-__version__ = '0.0.6'
+__version__ = '0.0.7'
 
-header = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.167 YaBrowser/22.7.3.822 Yowser/2.5 Safari/537.36',}
-header_urllib = [('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.167 YaBrowser/22.7.3.822 Yowser/2.5 Safari/537.36'),]
+headers = {'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.167 YaBrowser/22.7.3.822 Yowser/2.5 Safari/537.36 Edg/111.0.1661.51', }
+
+header_urllib = [('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.167 YaBrowser/22.7.3.822 Yowser/2.5 Safari/537.36 Edg/111.0.1661.51'),]
 
 
 def main(username):
@@ -66,10 +65,14 @@ def main(username):
         while not is_last_page_reached:
             success = None
             
-            logging.info(f"Fetching page {current_page} of {username}")
+            logging.info(f"Fetching page {current_page} of {username}")            
 
-            session = get_session(header) 
-            r = session.get(f'https://{username}.artstation.com/rss?page={current_page}')
+            session = requests.Session()
+            session.headers.update(headers)
+
+            # r = session.get(f'https://{username}.artstation.com/rss?page={current_page}', timeout=5)
+            r = session.get(f'https://www.artstation.com/{username}.rss?page={current_page}', timeout=5)
+
             channel = BeautifulSoup(r.text, "lxml-xml").rss.channel
             tag_titles = channel.select("item > title")
             links = channel.select("item > link")
@@ -98,7 +101,7 @@ def main(username):
                     if not is_post_already_saved(username, project_hash_id, user_projects):
 
                         # Fetch information about the project
-                        project_info = requests.get(f"https://www.artstation.com/projects/{project_hash_id}.json", headers=header)
+                        project_info = requests.get(f"https://www.artstation.com/projects/{project_hash_id}.json", headers=headers)
                         assets = project_info.json()["assets"]
 
                         # For each asset in the project
@@ -136,12 +139,13 @@ def main(username):
         exception_info = exc_info()
         with open('bug_report.log', mode='w') as report_file:
             print_exception(*exception_info, file=report_file)
+            report_file.write(f'Response code: {r.status_code}')
         
         return False
    
     return True
-                
-                        
+
+
 def extension_from_url(url):
     rurl = url[::-1]
     rext = ""
@@ -205,12 +209,6 @@ def write_post_in_db(username, project_hash_id, user_projects):
     except:
         logging.error("Can't write new data in file")
 
-        
-def get_session(headers):
-    session = requests.Session()
-    session.headers = headers
-    
-    return session
 
 def read_db_file(filename):
     user_projects = []
