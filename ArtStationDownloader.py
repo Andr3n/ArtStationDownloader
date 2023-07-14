@@ -20,7 +20,7 @@ logging.basicConfig(
 
 logging.getLogger().setLevel(logging.INFO)
 
-__version__ = '0.0.7'
+__version__ = '0.0.8'
 
 headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 YaBrowser/23.5.4.674 Yowser/2.5 Safari/537.36',}
 
