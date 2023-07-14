@@ -22,7 +22,7 @@ logging.getLogger().setLevel(logging.INFO)
 
 __version__ = '0.0.7'
 
-headers = {'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.167 YaBrowser/22.7.3.822 Yowser/2.5 Safari/537.36 Edg/111.0.1661.51', }
+headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 YaBrowser/23.5.4.674 Yowser/2.5 Safari/537.36',}
 
 header_urllib = [('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.167 YaBrowser/22.7.3.822 Yowser/2.5 Safari/537.36 Edg/111.0.1661.51'),]
 
@@ -70,52 +70,65 @@ def main(username):
             session = requests.Session()
             session.headers.update(headers)
 
-            # r = session.get(f'https://{username}.artstation.com/rss?page={current_page}', timeout=5)
             r = session.get(f'https://www.artstation.com/{username}.rss?page={current_page}', timeout=5)
 
             channel = BeautifulSoup(r.text, "lxml-xml").rss.channel
             tag_titles = channel.select("item > title")
             links = channel.select("item > link")
+            items = channel.select("item")
             
             all_titles = [t.text for t in tag_titles]
             titles = []
             
-            projects = []
+            projects_hash = []
             for title, link in zip(all_titles, links):
                 if not 'blog' in link.text:
                     titles.append(title)
-                    projects.append(link.text.split('/')[-1])
+                    projects_hash.append(link.text.split('/')[-1])
+            
+            images_dict = {}
+            items = channel.select("item")
+            for item in items:
+                content = item.find('content:encoded').text
+                index_artwork = content.find('artwork') + 8
+                index_end = content[index_artwork:].find('"')
+                art_hash = content[index_artwork:index_artwork + index_end].lower()
+
+                items_soup = BeautifulSoup(content, 'html.parser')
+                image_tags = items_soup.select('img')
+
+                sources = []
+                for tag in image_tags:
+                    if not ('class' in tag.attrs and tag['class'] != "emoji"):
+                        sources.append(tag['src'])
+
+                images_dict[art_hash] = sources
                 
-            page_num_projects = len(projects)
+            page_num_projects = len(projects_hash)
 
             is_last_page_reached = page_num_projects < 49 # Each full page contains 50 projects. If it has less than 50, it is the last page
 
-            for index in range(len(projects)):
+            for index in range(len(projects_hash)):
 
                     project_name    = titles[index]
-                    project_hash_id = projects[index]
+                    project_hash_id = projects_hash[index]
 
                     logging.info(f"Found project - '{project_name}' with hash_id {project_hash_id}")
 
                     # Have we already downloaded this post?
                     if not is_post_already_saved(username, project_hash_id, user_projects):
+                        
+                        asset_position = 0
 
-                        # Fetch information about the project
-                        project_info = requests.get(f"https://www.artstation.com/projects/{project_hash_id}.json", headers=headers)
-                        assets = project_info.json()["assets"]
-
-                        # For each asset in the project
-                        for asset in assets:
-                            asset_type = asset["asset_type"]
-                            asset_position = asset["position"]
-
-                            # If the asset is an image
-                            if asset_type == "image":
-                                asset_image_url = asset["image_url"]
+                        if project_hash_id.lower() in images_dict.keys():
+                    
+                            # For each asset in the project
+                            for asset_image_url in images_dict[project_hash_id.lower()]:
+                                asset_position += 1
 
                                 # Generate a download filename
                                 project_name = re.sub(r'[^\w]', '', project_name.replace(' ', '_'))
-                                filename = project_name[:60].lower() + "_" + project_hash_id + "_" + str(asset_position) + "." + extension_from_url(asset_image_url)
+                                filename = project_name[:60].lower() + "_" + project_hash_id + "_" + str(asset_position) + ".jpg"
                                 filepath = user_folder / filename
 
                                 logging.info(f"Found image in project - '{project_name}' [hash_id {project_hash_id}] at position {asset_position}.")
@@ -123,12 +136,12 @@ def main(username):
 
                                 # Download it
                                 success = download_media(asset_image_url, filename=filepath)
-                                sleep(1)
-                                
-                                
-                        if success:            
-                            # After downloading all assets, mark the project as downloaded.
-                            write_post_in_db(username, project_hash_id, user_projects)
+                                sleep(2)
+                                    
+                                    
+                            if success:            
+                                # After downloading all assets, mark the project as downloaded.
+                                write_post_in_db(username, project_hash_id, user_projects)
 
             if not is_last_page_reached:
                 current_page = current_page + 1
